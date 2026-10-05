@@ -1,0 +1,26 @@
+name: Verify airline access (no credentials)
+on:
+  workflow_dispatch:
+permissions: {}
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: Check public airline endpoints
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --max-time 20 'https://cebupacificairv2.cdn.content.amplience.net/content/key/ssl-SeatSale?depth=all&format=inlined&locale=en-PH' -o /tmp/cebu.json
+          curl --fail --silent --show-error --max-time 20 'https://www.jetstar.com/ph/en/deals' -o /tmp/jetstar.html
+          python3 - <<'PY'
+          import json, pathlib, re
+          cebu = json.loads(pathlib.Path('/tmp/cebu.json').read_text())
+          assert 'content' in cebu, 'Cebu content missing'
+          html = pathlib.Path('/tmp/jetstar.html').read_text()
+          match = re.search(r'<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)</script>', html)
+          assert match, 'Jetstar data missing or blocked'
+          page = json.loads(match.group(1))['props']['pageProps']
+          assert 'M_CMP_Campaign:' + page['campaignId'] in page['__APOLLO_STATE__'], 'Jetstar campaign missing'
+          print('Both public airline feeds are readable from GitHub.')
+          PY
